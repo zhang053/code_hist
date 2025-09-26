@@ -1,0 +1,38 @@
+# 忽略爬虫抓下来的图片
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.svg
+*.webp
+
+# 忽略视频和大文件
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.flv
+
+# 忽略日志和临时数据
+*.log
+*.csv
+*.json
+*.xml
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# VS Code 配置
+.vscode/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db

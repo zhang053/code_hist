@@ -1,7 +1,0 @@
-<!-- xml：可扩展标记语言 -->
-<!-- 标签名都是自定义的 -->
-<hello>
-    <aaa>
-        <bbb>nihao</bbb>
-    </aaa>
-</hello>
