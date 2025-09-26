@@ -1,0 +1,35 @@
+# 忽略图片
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.svg
+*.webp
+
+# 忽略视频
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.flv
+
+# 日志和临时文件
+*.log
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# VS Code 配置
+.vscode/
+
+# 系统文件
+.DS_Store
+Thumbs.db
