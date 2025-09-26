@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # 忽略爬虫抓下来的图片
+=======
+# 忽略图片
+>>>>>>> f745848db020d69957fbe2d0c1885a83d080d062
 *.jpg
 *.jpeg
 *.png
@@ -7,18 +11,27 @@
 *.svg
 *.webp
 
+<<<<<<< HEAD
 # 忽略视频和大文件
+=======
+# 忽略视频
+>>>>>>> f745848db020d69957fbe2d0c1885a83d080d062
 *.mp4
 *.avi
 *.mov
 *.mkv
 *.flv
 
+<<<<<<< HEAD
 # 忽略日志和临时数据
 *.log
 *.csv
 *.json
 *.xml
+=======
+# 日志和临时文件
+*.log
+>>>>>>> f745848db020d69957fbe2d0c1885a83d080d062
 
 # Python 缓存
 __pycache__/
@@ -33,8 +46,14 @@ env/
 # VS Code 配置
 .vscode/
 
+<<<<<<< HEAD
 # 操作系统文件
 .DS_Store
 Thumbs.db
 
 venv_forStudy/
+=======
+# 系统文件
+.DS_Store
+Thumbs.db
+>>>>>>> f745848db020d69957fbe2d0c1885a83d080d062
