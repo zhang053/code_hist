@@ -30,3 +30,9 @@ if studentDB.find_one({"id": d["id"]}) == None:
     print("录入成功")
 else:
     print("该学生已存在")
+
+# 以什么判断重复标准，就用那个属性查找
+
+# 数据获取阶段去重，可以可以用复合属性判断是否重复
+# 比如获取新闻，同一时间同一标题的判断是重复文章
+# if xxxx and sxxxx:
