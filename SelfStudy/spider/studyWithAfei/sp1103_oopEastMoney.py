@@ -70,6 +70,7 @@ class Stock:
             # print(len(data))
             self.save(data)
             print(f"成功获取{pn*100}条数据")
+            time.sleep(1)
 
     def save(self, data):
         # 在这里写链接mongodb，不合适，因为save写在了循环里，所以会被执行很多次
@@ -86,8 +87,8 @@ class Stock:
                 "今开": item["f17"],
                 "昨收": item["f18"],
             }
-            print(len(item["f14"]))
             self.dataDB.insert_one(result)
+        print(len(data))
 
     def run(self):
         self.connect_mongodb()
