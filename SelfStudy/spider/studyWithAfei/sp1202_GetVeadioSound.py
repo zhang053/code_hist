@@ -1,3 +1,5 @@
+# 在想要打开的地址的文件夹上方地址栏中输入cmd，可以打开当前位置的cmd，不再需要cd
+# powershell 可以有颜色，方便阅读
 """
 使用 ffmpeg 工具，对视频进行合并
 ffmpeg 是一个纯命令行工具，没有GUI界面
@@ -14,8 +16,20 @@ ffmpeg 是一个纯命令行工具，没有GUI界面
 5. 打开后右上角有个新建，添加复制的地址，然后点击ok->ok->ok
 
 ffmpeg 命令
+-i : input 输入的意思
+
 -合并
-    如果有一个mp4
+    如果有一个vedio.mp4和一个audio.mp3的文件，想要合成一个新的视频文件output.mp4
+        ffmpeg -i video.mp4 -i audio.mp3 -c:v copy -c:a aac -strict experimental output.mp4
+        (-i) 输入视频和音频，
+        (-c) copy,复制到...
+        (-c:v copy) v:video, 保持video的格式直接复制
+        (-c:a aac) a:audio aac是音频格式，将音频编码为aac格式
+        意思：把输入的视频保持不变，把音频转换为aac格式
+        -strict experimental 老版本，现在不再需要
+
+要使用python来进行该操作
+在pyton里执行命令行
 """
 
 import requests
@@ -54,3 +68,37 @@ with open("sp1204_bili_Sound.mp3", "wb") as f:
     f.write(response.content)
 
 # # 合并获取的音频和画面
+# 通过python执行cmd或power shell
+# 1. 下载python自带的包
+
+import subprocess
+
+# subprocess.call("ipconfig")
+
+# 输入长命令的时候，使用subprocess.run([])，命令中每遇到一个空格，放入列表中, 表示一个元素
+# ffmpeg -i sp1203_bili_pic.mp4　-i sp1204_bili_Sound.mp3 -c:v copy -c:a aac target.mp4
+subprocess.run(
+    [
+        "ffmpeg",
+        "-i",
+        "sp1203_bili_pic.mp4",
+        "-i",
+        "sp1204_bili_Sound.mp3",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "sp1205_target_video.mp4",
+        "-loglevel",
+        "error",  # 调整日志级别，error级别以上，不显示日志
+        "-y",  # 如果文件存在，直接覆盖
+    ]
+)
+
+# loglevel的级别
+# debug - 显示所有调试信息
+# info  - 显示信息性消息(默认,全部输出)
+# warning - 显示警告性消息
+# error - 只显示错误消息
+# quiet - 不显示任何消息
+# verbose - 显示详细的消息
