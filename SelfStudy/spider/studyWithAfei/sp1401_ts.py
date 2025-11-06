@@ -1,0 +1,31 @@
+"""
+ts
+把一个视频分成多个ts文件
+通常靠 m3u8 文件记录所有的ts分片信息
+ex: acfun(a站)
+同一个视频，不同url，多个ts文件链接，视频音频不分开
+
+b站 --> m4s 通过range控制分片
+        同一个视频,url相同
+        视频音频分开了
+
+分析大文件,看到视频时通过ts加载的之后,第一时间搜索m3u8
+点击m3u8文件,查看response响应内容
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:5  ---> # 5秒钟
+#EXT-X-MEDIA-SEQUENCE:0
+#EXTINF:5.000000,
+c0b4460c3127377d-d97dadc9f2d280decd7dd93c7b17aca8-hls_720p_2.00000.ts?pkey=ABBw5t9jfggAo7n7amWP6K3nPKg1FnmlnPqL50UlOoeqUous8uuX1ZcdudjWeiOVbmbZttaCQJkJ4gAS7R2r8KrbOsGowb-2ZTHc8poRKqMIu8wBRnW-ZF-NN-dHoZCQN3_Q9Aca_bKxePd4bCvk5rpwc5koXx0NySY_66nidfmke16tKNsQDUiJ511VXflDykavdg9DMM1ovJSG9WRirdi7PeJ-dvWsN_m2ZwLEMdW8NwjabvMWGqko-b3-rvUYJUk&safety_id=AAIcFoRjyJws7q73Pl1MwxBQ
+#EXTINF:5.000000,
+c0b4460c3127377d-d97dadc9f2d280decd7dd93c7b17aca8-hls_720p_2.00001.ts?pkey=ABBw5t9jfggAo7n7amWP6K3nPKg1FnmlnPqL50UlOoeqUous8uuX1ZcdudjWeiOVbmbZttaCQJkJ4gAS7R2r8KrbOsGowb-2ZTHc8poRKqMIu8wBRnW-ZF-NN-dHoZCQN3_Q9Aca_bKxePd4bCvk5rpwc5koXx0NySY_66nidfmke16tKNsQDUiJ511VXflDykavdg9DMM1ovJSG9WRirdi7PeJ-dvWsN_m2ZwLEMdW8NwjabvMWGqko-b3-rvUYJUk&safety_id=AAIcFoRjyJws7q73Pl1MwxBQ
+#EXTINF:5.000000,
+c0b4460c3127377d-d97dadc9f2d280decd7dd93c7b17aca8-hls_720p_2.00002.ts?pkey=ABBw5t9jfggAo7n7amWP6K3nPKg1FnmlnPqL50UlOoeqUous8uuX1ZcdudjWeiOVbmbZttaCQJkJ4gAS7R2r8KrbOsGowb-2ZTHc8poRKqMIu8wBRnW-ZF-NN-dHoZCQN3_Q9Aca_bKxePd4bCvk5rpwc5koXx0NySY_66nidfmke16tKNsQDUiJ511VXflDykavdg9DMM1ovJSG9WRirdi7PeJ-dvWsN_m2ZwLEMdW8NwjabvMWGqko-b3-rvUYJUk&safety_id=AAIcFoRjyJws7q73Pl1MwxBQ
+#EXTINF:5.000000,
+c0b4460c3127377d-d97dadc9f2d280decd7dd93c7b17aca8-hls_720p_2.00003.ts?pkey=ABBw5t9jfggAo7n7amWP6K3nPKg1FnmlnPqL50UlOoeqUous8uuX1ZcdudjWeiOVbmbZttaCQJkJ4gAS7R2r8KrbOsGowb-2ZTHc8poRKqMIu8wBRnW-ZF-NN-dHoZCQN3_Q9Aca_bKxePd4bCvk5rpwc5koXx0NySY_66nidfmke16tKNsQDUiJ511VXflDykavdg9DMM1ovJSG9WRirdi7PeJ-dvWsN_m2ZwLEMdW8NwjabvMWGqko-b3-rvUYJUk&safety_id=AAIcFoRjyJws7q73Pl1MwxBQ
+#EXTINF:5.000000,
+c0b4460c3127377d-d97dadc9f2d280decd7dd93c7b17aca8-hls_720p_2.00004.ts?pkey=ABBw5t9jfggAo7n7amWP6K3nPKg1FnmlnPqL50UlOoeqUous8uuX1ZcdudjWeiOVbmbZttaCQJkJ4gAS7R2r8KrbOsGowb-2ZTHc8poRKqMIu8wBRnW-ZF-NN-dHoZCQN3_Q9Aca_bKxePd4bCvk5rpwc5koXx0NySY_66nidfmke16tKNsQDUiJ511VXflDykavdg9DMM1ovJSG9WRirdi7PeJ-dvWsN_m2ZwLEMdW8NwjabvMWGqko-b3-rvUYJUk&safety_id=AAIcFoRjyJws7q73Pl1MwxBQ
+...
+
+
+"""
