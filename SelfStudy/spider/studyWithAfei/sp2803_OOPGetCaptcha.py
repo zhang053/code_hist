@@ -57,6 +57,7 @@ class Geetest:
         return result
 
     # 使用ddddocr的方案
+    # 因为版本问题，不支持
     def get_offset_ddddocr(self):
         # 需要两个图片参数，缺口图和背景图
         page = self.page
