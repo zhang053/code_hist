@@ -52,3 +52,27 @@ venv_forStudy/
 .DS_Store
 Thumbs.db
 
+
+# 浏览器用户数据（Playwright / Chromium）
+userData/
+profile/
+chrome-data/
+edge-data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ===== Playwright / Chromium profiles (force ignore) =====
+**/*_userData/
+**/*_userData/**
+
+# 你这个目录的精准规则（双保险）
+SelfStudy/spider/studyWithAfei/**/4.3_userData/
+SelfStudy/spider/studyWithAfei/**/4.3_userData/**

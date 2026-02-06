@@ -16,14 +16,14 @@ s = "你好啊"  # 准备加密的字符串
 md5 = hashlib.md5(s.encode()).hexdigest()
 print(md5)
 
-# sha1 加密，160位二进制
-sha1 = hashlib.sha1(s.encode()).hexdigest()
-print(md5)
+# # sha1 加密，160位二进制
+# sha1 = hashlib.sha1(s.encode()).hexdigest()
+# print(md5)
 
-# sha256, 256位二进制
-sha256 = hashlib.sha1(s.encode()).hexdigest()
-print(sha256)
+# # sha256, 256位二进制
+# sha256 = hashlib.sha1(s.encode()).hexdigest()
+# print(sha256)
 
-# sha512, 512位二进制
-sha512 = hashlib.sha1(s.encode()).hexdigest()
-print(sha512)
+# # sha512, 512位二进制
+# sha512 = hashlib.sha1(s.encode()).hexdigest()
+# print(sha512)

@@ -10,6 +10,9 @@
 import requests
 from lxml import etree
 import aiohttp
+
+# pip install aiohttp 这个需要安装，因为不是python自带的库
+
 import asyncio
 from requests import session
 import re
