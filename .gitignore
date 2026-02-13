@@ -25,6 +25,7 @@
 *.csv
 *.json
 *.xml
+*.jsonl
 
 # ---------------------------
 # Python 缓存与编译文件
@@ -76,3 +77,4 @@ Thumbs.db
 # 你这个目录的精准规则（双保险）
 SelfStudy/spider/studyWithAfei/**/4.3_userData/
 SelfStudy/spider/studyWithAfei/**/4.3_userData/**
+pw_user_data/
