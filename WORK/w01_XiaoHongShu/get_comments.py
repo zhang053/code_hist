@@ -17,9 +17,9 @@ from playwright.sync_api import sync_playwright
 SEARCH_URL = "https://www.xiaohongshu.com/search_result?keyword=%25E8%258B%25B1%25E8%25AF%25AD%25E5%25AD%25A6%25E4%25B9%25A0%25E6%259C%25BA&source=web_search_result_notes"
 
 MAX_CARDS_TO_RUN = 999999
-SLEEP_EVERY_N_CARDS = 15  # ✅ 每 15 个卡片休息
-SLEEP_SECONDS = 45
-CLICK_GAP = (1.2, 2.4)  # ✅ 每次点卡片前随机停
+SLEEP_EVERY_N_CARDS = 10
+SLEEP_SECONDS = 60
+CLICK_GAP = (1.0, 2.0)
 
 USER_DATA_DIR = "./pw_user_data"
 VIEWPORT = {"width": 1300, "height": 760}
@@ -35,19 +35,22 @@ TOP_EMPTY_LIMIT = 12
 
 # ✅ show-more 节奏（重点：两次点击之间要冷却）
 SHOWMORE_WAIT_WINDOW = 1.2
-SHOWMORE_CLICK_COOLDOWN = (0.35, 0.75)  # ✅ 两次点击 show-more 之间的延迟（你要的）
-SHOWMORE_CLICK_HUMAN_GAP = (0.08, 0.20)  # hover/scroll 等小动作间隔
+SHOWMORE_CLICK_COOLDOWN = (0.35, 0.75)
+SHOWMORE_CLICK_HUMAN_GAP = (0.08, 0.20)
 SHOWMORE_PER_ROOT_EMPTY_LIMIT = 6
 SHOWMORE_GLOBAL_NO_GROWTH_LIMIT = 14
 EMPTY_PAGE_LIMIT = 2
 
-# 搜索页滚动：必须很小（你鼠标小滚一下就出内容）
+# 搜索页滚动：必须很小
 SEARCH_SCROLL_WHEEL_DELTA_RANGE = (90, 180)
 SEARCH_SCROLL_GAP = (0.06, 0.14)
 SEARCH_NO_PROGRESS_LIMIT = 30
 
 RESULT_PATH = "result_comments.json"
 CHECKPOINT_PATH = "checkpoint_comments.json"
+
+# ⭐ 每 50 张重开 page
+REOPEN_PAGE_EVERY = 50
 
 # MongoDB
 MONGO_URI = "mongodb://localhost:27017"
@@ -161,14 +164,6 @@ def atomic_write_json(path: str, obj: Any):
 # 时间文本 -> YYYY-MM-DD
 # =========================
 def normalize_time_text_to_ymd(t: str) -> str:
-    """
-    目标输出：YYYY-MM-DD
-    支持：
-      2025-09-24 / 2025.09.24 / 2025/09/24
-      09-24 / 09.24 / 09/24（默认今年）
-      今天 / 昨天 / N天前
-    解析不了就原样返回（避免卡住）
-    """
     if not t:
         return ""
 
@@ -199,7 +194,7 @@ def normalize_time_text_to_ymd(t: str) -> str:
 
 
 # =========================
-# MongoDB
+# MongoDB（结构不改：_id=note_id,title,comments）
 # =========================
 def mongo_upsert_one(note_id: str, card_obj: dict):
     try:
@@ -207,8 +202,14 @@ def mongo_upsert_one(note_id: str, card_obj: dict):
 
         client = MongoClient(MONGO_URI)
         col = client[MONGO_DB][MONGO_COL]
-        doc = {"_id": note_id, "cards": [card_obj]}
+
+        doc = {
+            "_id": note_id,
+            "title": card_obj["title"],
+            "comments": card_obj["comments"],
+        }
         col.replace_one({"_id": note_id}, doc, upsert=True)
+
     except Exception as e:
         log_warn(f"MongoDB 写入失败 note_id={note_id}: {e}")
 
@@ -217,6 +218,9 @@ def mongo_upsert_one(note_id: str, card_obj: dict):
 # JSON 解析/归一化（time 留空，后面用 DOM 填）
 # =========================
 def pick_data_comments(payload: dict):
+    """
+    兼容你截图这种：data.comments = [] 且 has_more=false
+    """
     if not isinstance(payload, dict):
         return None, None, None
     d = payload.get("data")
@@ -240,9 +244,9 @@ def norm_top_comment_obj(item: dict):
     return {
         "id": str(item.get("id") or ""),
         "name": str(ui.get("nickname") or ""),
-        "xhs_no": profile_url(str(ui.get("user_id") or "")),  # ✅ 存拼接好的 url
+        "xhs_no": profile_url(str(ui.get("user_id") or "")),
         "ip": str(item.get("ip_location") or ""),
-        "time": "",  # ✅ DOM 填：span文本 -> YYYY-MM-DD
+        "time": "",
         "content": str(item.get("content") or ""),
         "replies": [],
         "_sub_comment_has_more": (
@@ -320,18 +324,13 @@ def ensure_comment_dom(page, tid: str, max_scroll=90) -> bool:
 
 
 def click_show_more_for_root(page, tid: str, active_root_hint: dict) -> bool:
-    """
-    在 #comment-<tid> 的平级/附近找 .reply-container .show-more 点击
-    """
     root = page.locator(f"#comment-{tid}")
     if root.count() == 0:
         return False
 
-    # show-more 常在 comment 的父容器里（但层级可能变动）
     parent = root.locator("xpath=..")
     btn = parent.locator(".reply-container .show-more").first
     if btn.count() == 0:
-        # 兜底：往上再找一层
         parent2 = parent.locator("xpath=..")
         btn = parent2.locator(".reply-container .show-more").first
         if btn.count() == 0:
@@ -351,7 +350,6 @@ def click_show_more_for_root(page, tid: str, active_root_hint: dict) -> bool:
         btn.click(timeout=2000)
         return True
     except Exception:
-        # JS click fallback
         try:
             page.evaluate("(el)=>el.click()", btn.element_handle())
             return True
@@ -367,6 +365,15 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
     replies_by_root: Dict[str, Dict[str, dict]] = {}
     reply_id_to_root: Dict[str, str] = {}
     pending: List[Tuple[str, str, dict]] = []
+
+    top_state = {"count_resp": 0, "has_more": None, "seen_keys": set()}
+    reply_state = {"resp_count": 0, "empty_pages_by_root": {}}
+    active_root_hint = {"root": "", "ts": 0.0}
+
+    # ⭐ 用于“无评论不空等”的快速判断
+    # 一旦收到任意一条 data.comments=[] 且 has_more=false 的顶评响应，就可立即确认无评论
+    # 但为了稳妥：必须是“顶评批次”（not reply batch）的 payload，且 comments 为空
+    no_comment_fast_confirmed = {"hit": False}
 
     def attach_reply(reply_id: str, target_id: str, obj: dict) -> bool:
         if target_id in tops:
@@ -398,10 +405,6 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
         pending = new_pending
         return attached
 
-    top_state = {"count_resp": 0, "has_more": None, "seen_keys": set()}
-    reply_state = {"resp_count": 0, "empty_pages_by_root": {}}
-    active_root_hint = {"root": "", "ts": 0.0}
-
     def on_response(resp):
         url = resp.url
         if resp.request.resource_type != "xhr":
@@ -420,8 +423,14 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
         if comments is None:
             return
 
-        # 顶评批次
+        # 顶评批次：comments 为空且 has_more=false -> 直接确认为“无评论”
         if not is_reply_batch(comments):
+            if len(comments) == 0 and has_more is False:
+                no_comment_fast_confirmed["hit"] = True
+                top_state["has_more"] = False
+                top_state["count_resp"] += 1
+                return
+
             key = cursor or url.split("?")[-1]
             if key in top_state["seen_keys"]:
                 return
@@ -438,7 +447,7 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
                 if tid not in tops:
                     tops[tid] = norm_top_comment_obj(it)
 
-                # ✅ 顶评接口自带 sub_comments（未折叠的第一条回复）
+                # 顶评接口自带 sub_comments（未折叠的第一条回复）
                 sub_list = it.get("sub_comments")
                 if isinstance(sub_list, list) and sub_list:
                     replies_by_root.setdefault(tid, {})
@@ -512,22 +521,51 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
     except Exception:
         pass
 
-    # 顶评翻页：右侧滚动（拿全顶评）
+    # ✅ 如果页面显示“荒地 点击评论”（无评论），shown_total 往往解析不到或为 0
+    # 但我们以监听到的 JSON 为准，不空等。
+
+    # 顶评翻页：右侧评论区域
     page.mouse.move(*COMMENT_SCROLL_POINT)
     jitter(0.08, 0.15)
 
-    # 等首包顶评
+    # 等首包顶评（但如果无评论，JSON会很快返回空）
     t0 = now()
-    while now() - t0 < 2.3 and top_state["count_resp"] == 0:
+    while (
+        now() - t0 < 2.3
+        and top_state["count_resp"] == 0
+        and not no_comment_fast_confirmed["hit"]
+    ):
         time.sleep(0.03)
 
+    # ⭐ 无评论：直接返回
+    if no_comment_fast_confirmed["hit"] or (shown_total == 0):
+        # 仍然构造 card_obj / report
+        card_obj = {"title": title, "comments": []}
+        report = {
+            "title": title,
+            "shown_total": shown_total,
+            "got_total": 0,
+            "diff_total": 0 if shown_total in (None, 0) else (shown_total - 0),
+            "got_top": 0,
+            "got_replies": 0,
+            "reply_resp": 0,
+        }
+        try:
+            page.remove_listener("response", on_response)
+        except Exception:
+            pass
+        return card_obj, report
+
+    # 顶评继续翻页：拿全顶评
     empty = 0
     last_resp = top_state["count_resp"]
     while True:
         if top_state["has_more"] is False:
             break
+
         page.mouse.wheel(0, TOP_WHEEL_DELTA)
         jitter(*TOP_WHEEL_GAP)
+
         start = now()
         got_new = False
         while now() - start < TOP_WAIT_WINDOW:
@@ -535,6 +573,7 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
                 got_new = True
                 break
             time.sleep(0.03)
+
         if got_new:
             last_resp = top_state["count_resp"]
             empty = 0
@@ -561,7 +600,6 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
             if not clicked:
                 break
 
-            # ✅ 你要的节奏：点击后等待一会儿（让XHR发出/返回）
             start = now()
             grew = False
             while now() - start < SHOWMORE_WAIT_WINDOW:
@@ -571,10 +609,8 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
                     break
                 time.sleep(0.05)
 
-            # ✅ 两次点击之间冷却（你要求的“停一会儿再点”）
             time.sleep(random.uniform(*SHOWMORE_CLICK_COOLDOWN))
 
-            # empty/has_more 终止条件
             ep = reply_state["empty_pages_by_root"].get(tid, 0)
             if ep >= EMPTY_PAGE_LIMIT:
                 break
@@ -590,7 +626,6 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
                 if global_no_growth >= SHOWMORE_GLOBAL_NO_GROWTH_LIMIT:
                     break
 
-            # 小滚一点让 show-more/子评论区域刷新出来
             page.mouse.move(*COMMENT_SCROLL_POINT)
             page.mouse.wheel(0, 420)
             time.sleep(random.uniform(0.05, 0.12))
@@ -600,7 +635,7 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
 
     flush_pending()
 
-    # ✅ 最后：用 DOM 把 time/ip 填正确（span 文本），time 转 YYYY-MM-DD
+    # 最后：DOM 补 time/ip
     comments_out = []
     got_top = len(tops)
     got_replies = 0
@@ -639,7 +674,6 @@ def fetch_one_card(page, note_id: str, title: str) -> Tuple[dict, dict]:
 
     card_obj = {"title": title, "comments": comments_out}
     report = {
-        "note_id": note_id,
         "title": title,
         "shown_total": shown_total,
         "got_total": got_total,
@@ -704,7 +738,8 @@ def scan_clickable_cards(page) -> List[dict]:
         try:
             tloc = sec.locator(SEL_TITLE_IN_SECTION).first
             if tloc.count():
-                title = (tloc.inner_text() or "").strip()
+                # ✅ 不 strip：原样（你要求的）
+                title = tloc.inner_text() or ""
         except Exception:
             title = ""
 
@@ -715,17 +750,45 @@ def scan_clickable_cards(page) -> List[dict]:
 
 
 # =========================
+# 断点 key：标题优先，空标题用 index
+# =========================
+def make_resume_key(title: str, index: int) -> str:
+    if title:
+        return title  # 原样（不 strip）
+    return f"__EMPTY__@{index}"
+
+
+# =========================
 # main：断点续跑 + 每卡保存 + Mongo 同步
 # =========================
 def main():
     checkpoint = load_json_file(
-        CHECKPOINT_PATH, default={"done_note_ids": [], "failed": [], "mismatch": []}
+        CHECKPOINT_PATH,
+        default={"done_keys": [], "last_index": 0, "failed": [], "mismatch": []},
     )
-    done_set = set(checkpoint.get("done_note_ids", []))
 
+    done_keys = set(checkpoint.get("done_keys", []))
+    next_min_index = checkpoint.get("last_index", 0)
+
+    # ⭐ 从 result.json 里补齐 done_keys（防止 checkpoint 丢/少）
     result = load_json_file(RESULT_PATH, default={"cards": []})
     if not isinstance(result, dict) or "cards" not in result:
         result = {"cards": []}
+    for i, c in enumerate(result.get("cards", []) or []):
+        title = ""
+        if isinstance(c, dict):
+            title = c.get("title") or ""
+        k = make_resume_key(title, i)
+        if title:
+            done_keys.add(title)
+        else:
+            # 空标题：尽量用占位，但这里 index 是 result 内序号，不一定等于 data-index
+            # 不强行加入，避免误判
+            pass
+
+    # 写回一次（包含标题）
+    checkpoint["done_keys"] = list(done_keys)
+    atomic_write_json(CHECKPOINT_PATH, checkpoint)
 
     with sync_playwright() as p:
         ctx = p.chromium.launch_persistent_context(
@@ -734,24 +797,27 @@ def main():
             viewport=VIEWPORT,
             args=["--disable-blink-features=AutomationControlled"],
         )
-        page = ctx.new_page()
-        page.goto(SEARCH_URL, wait_until="domcontentloaded")
+
+        def open_new_page():
+            page = ctx.new_page()
+            page.goto(SEARCH_URL, wait_until="domcontentloaded")
+            page.wait_for_selector(SEL_FEEDS, timeout=30000)
+            return page
+
+        page = open_new_page()
 
         log_info("如果需要登录/验证，请在浏览器完成后回到终端按回车继续...")
         input()
-
-        page.wait_for_selector(SEL_FEEDS, timeout=30000)
 
         processed = 0
         failed_cards = []
         mismatch_cards = []
 
-        next_min_index = 0
         no_progress = 0
         max_seen_clickable = -1
 
         log_info(
-            f"[SEARCH] start need_count={MAX_CARDS_TO_RUN}, already_done={len(done_set)}"
+            f"[SEARCH] start need_count={MAX_CARDS_TO_RUN}, already_done={len(done_keys)} start_index={next_min_index}"
         )
 
         while processed < MAX_CARDS_TO_RUN:
@@ -763,13 +829,15 @@ def main():
             for c in cards:
                 if c["index"] < next_min_index:
                     continue
-                if c["note_id"] in done_set:
+
+                resume_key = make_resume_key(c["title"], c["index"])
+                if resume_key in done_keys:
                     continue
+
                 target = c
                 break
 
             if target is None:
-                # ✅ 小步滚动加载更多（不会滚过头）
                 before = max_seen_clickable
                 delta = random.randint(*SEARCH_SCROLL_WHEEL_DELTA_RANGE)
                 page.mouse.wheel(0, delta)
@@ -785,9 +853,7 @@ def main():
                         f"[SEARCH] no_progress={no_progress}/{SEARCH_NO_PROGRESS_LIMIT} max_clickable_index={max_seen_clickable}"
                     )
                     if no_progress >= SEARCH_NO_PROGRESS_LIMIT:
-                        log_warn(
-                            "[SEARCH STOP] 长时间没有新卡片出现（可能 the end 不显示/被回收），停止"
-                        )
+                        log_warn("[SEARCH STOP] 长时间没有新卡片出现，停止")
                         break
                 else:
                     no_progress = 0
@@ -797,9 +863,10 @@ def main():
             idx = target["index"]
             nid = target["note_id"]
             title = target["title"]
+            resume_key = make_resume_key(title, idx)
 
             log_info(
-                f"\n===== [CARD {processed+1}/{MAX_CARDS_TO_RUN}] data-index={idx} note_id={nid} title={title!r} ====="
+                f"\n===== [CARD {processed+1}] index={idx} note_id={nid} title={title!r} ====="
             )
 
             try:
@@ -808,7 +875,7 @@ def main():
 
                 card_obj, report = fetch_one_card(page, note_id=nid, title=title)
 
-                # 关闭详情回搜索
+                # 关闭详情
                 try:
                     if page.locator(SEL_DETAIL_CLOSE_X).count():
                         page.locator(SEL_DETAIL_CLOSE_X).first.click(timeout=2000)
@@ -820,21 +887,22 @@ def main():
                     except Exception:
                         pass
 
-                # ✅ 每卡写一次 result
+                # ✅ 每卡写一次 result（结构不改：{"cards":[...] }）
                 result["cards"].append(card_obj)
                 atomic_write_json(RESULT_PATH, result)
 
-                # ✅ Mongo 同步
+                # ✅ Mongo 同步（结构不改）
                 mongo_upsert_one(nid, card_obj)
 
-                # ✅ checkpoint
-                done_set.add(nid)
-                checkpoint["done_note_ids"] = sorted(list(done_set))
+                # ✅ checkpoint：写入标题 key
+                done_keys.add(resume_key)
+                checkpoint["done_keys"] = list(done_keys)
+                checkpoint["last_index"] = idx + 1
 
                 if report.get("diff_total") not in (None, 0):
                     checkpoint.setdefault("mismatch", []).append(
                         {
-                            "note_id": nid,
+                            "title": title,
                             "diff_total": report.get("diff_total"),
                             "shown_total": report.get("shown_total"),
                             "got_total": report.get("got_total"),
@@ -842,7 +910,7 @@ def main():
                     )
                     mismatch_cards.append(
                         (
-                            nid,
+                            title,
                             report.get("diff_total"),
                             report.get("shown_total"),
                             report.get("got_total"),
@@ -853,9 +921,21 @@ def main():
 
                 processed += 1
                 log_info(
-                    f"[CARD OK] note_id={nid} shown={report.get('shown_total')} got={report.get('got_total')} diff={report.get('diff_total')} reply_resp={report.get('reply_resp')}"
+                    f"[CARD OK] index={idx} shown={report.get('shown_total')} got={report.get('got_total')} diff={report.get('diff_total')} reply_resp={report.get('reply_resp')}"
                 )
+
                 next_min_index = idx + 1
+
+                # ⭐ 每 50 张重开 page
+                if REOPEN_PAGE_EVERY and processed % REOPEN_PAGE_EVERY == 0:
+                    log_warn(
+                        f"[REOPEN PAGE] processed={processed} 重开 page 防止卡顿..."
+                    )
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
+                    page = open_new_page()
 
                 if (
                     processed % SLEEP_EVERY_N_CARDS == 0
@@ -866,16 +946,15 @@ def main():
 
             except Exception as e:
                 err_text = f"{type(e).__name__}: {e}"
-                log_err(f"[CARD FAIL] data-index={idx} note_id={nid} {err_text}")
+                log_err(f"[CARD FAIL] index={idx} note_id={nid} {err_text}")
                 log_err(traceback.format_exc())
 
-                failed_cards.append((nid, err_text))
+                failed_cards.append((title, err_text))
                 checkpoint.setdefault("failed", []).append(
-                    {"note_id": nid, "error": err_text}
+                    {"title": title, "error": err_text}
                 )
                 atomic_write_json(CHECKPOINT_PATH, checkpoint)
 
-                # 尝试回到搜索页
                 try:
                     if page.locator(SEL_DETAIL_CLOSE_X).count():
                         page.locator(SEL_DETAIL_CLOSE_X).first.click(timeout=1500)
@@ -887,21 +966,20 @@ def main():
                 next_min_index = idx + 1
                 continue
 
-        # ✅ 总结输出
         log_info("\n========== RUN SUMMARY ==========")
-        log_info(f"processed={processed}, done_total={len(done_set)}")
+        log_info(f"processed={processed}, done_total={len(done_keys)}")
 
         if failed_cards:
             log_warn("未正常结束（失败）的卡片：")
-            for nid, err in failed_cards:
-                log_warn(f"  - {nid}  {err}")
+            for t, err in failed_cards:
+                log_warn(f"  - title={t!r}  {err}")
         else:
             log_info("失败卡片：无")
 
         if mismatch_cards:
             log_warn("评论数有差异（diff!=0）的卡片（本次运行）：")
-            for nid, diff, shown, got in mismatch_cards:
-                log_warn(f"  - {nid}  shown={shown} got={got} diff={diff}")
+            for t, diff, shown, got in mismatch_cards:
+                log_warn(f"  - title={t!r}  shown={shown} got={got} diff={diff}")
         else:
             log_info("评论数差异：本次无")
 
